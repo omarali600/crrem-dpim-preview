@@ -216,6 +216,52 @@ p, li, .stMarkdown p, .stMarkdown li {
 .stat-value.warn { color: var(--maroon); }
 .stat-value.ok   { color: var(--sage); }
 
+/* HEADLINE BRIEF -------------------------------------------------------- */
+.brief {
+  margin: 1.6rem 0 0.2rem 0;
+  padding: 1.3rem 1.6rem 1.35rem 1.6rem;
+  background:
+    linear-gradient(180deg, rgba(56, 86, 118, 0.04) 0%, rgba(56, 86, 118, 0) 100%),
+    var(--paper-soft);
+  border-left: 4px solid var(--navy);
+  border-top: 1px solid var(--rule-soft);
+  border-right: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+  position: relative;
+}
+.brief::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0;
+  width: 50px; height: 4px;
+  background: var(--maroon);
+}
+.brief-eyebrow {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--maroon);
+  font-weight: 700;
+  margin-bottom: 0.65rem;
+}
+.brief-body {
+  font-family: 'Spectral', Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.6;
+  color: var(--ink);
+  letter-spacing: -0.003em;
+}
+.brief-body b {
+  font-family: 'Roboto Slab', serif;
+  font-weight: 600;
+  color: var(--ink);
+}
+.brief-body i {
+  font-style: italic;
+  color: var(--navy);
+}
+
 /* SECTION RULE ---------------------------------------------------------- */
 .section-rule {
   display: flex;
@@ -595,6 +641,13 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+
+# ---------------------------------------------------------------------------
+# Headline analytical brief (auto-computed)
+# ---------------------------------------------------------------------------
+brief = lenses.compute_headline_brief(ticker_results, portfolio, TICKERS)
+lenses.render_headline_brief(brief)
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,9 @@ Same portfolio model, four presentations:
   - Regulatory / LP (NZIF + SFDR + TCFD + GRESB-comparable)
   - Engagement (per-issuer climate dossiers)
   - Analyst (raw working surface with disclosure provenance)
+
+Plus a headline analytical brief computed deterministically from the
+portfolio model, shown above the lens selector on every view.
 """
 from __future__ import annotations
 
@@ -69,6 +72,103 @@ def _trajectory_chart(traj, pathway, misalignment_year, *,
                         bgcolor=PAPER_SOFT, bordercolor=NAVY),
     )
     return fig
+
+
+_CARRIER_LABELS = {
+    "Elec_Grid": "grid electricity",
+    "Gas": "natural gas",
+    "Oil": "heating oil",
+    "District_Heating": "district heating",
+    "District_Cooling": "district cooling",
+    "Biomass": "biomass",
+    "Other_Fuels": "other fuels",
+    "Renew_Consumed": "on-site renewable energy",
+}
+
+
+def compute_headline_brief(ticker_results, portfolio, ticker_inputs):
+    """Identify the single ticker contributing most to portfolio carbon intensity
+    and compute the counterfactual portfolio intensity if that ticker were aligned
+    with its 2024 CRREM pathway value.  Returns the components needed to render
+    the brief sentence.  Deterministic from data — no LLM or guess work."""
+    total_gia = max(portfolio["total_gia_m2"], 1.0)
+    contribs = []
+    for t in ticker_results:
+        w = t["total_gia_m2"] / total_gia
+        contribs.append((t, w * t["carbon_intensity_kgco2_m2"], w))
+    contribs.sort(key=lambda x: -x[1])
+    top, top_contrib, top_weight = contribs[0]
+
+    contrib_share_pct = (top_contrib / portfolio["carbon_intensity_kgco2_m2"]) * 100
+
+    # Dominant misaligned sleeve = highest-CI pseudo-asset in the ticker.
+    worst_sleeve = max(top["pseudo_assets"],
+                       key=lambda p: p["carbon_intensity_kgco2_m2"])
+
+    # Find the raw input for the sleeve (carrier breakdown).
+    top_raw = next(r for r in ticker_inputs if r.ticker == top["ticker"])
+    sleeve_raw = next(s for s in top_raw.pseudo_assets
+                      if s.label == worst_sleeve["label"])
+    energy = sleeve_raw.energy_kwh
+    total_energy = sum(energy.values()) or 1.0
+    top_carrier_code, top_carrier_kwh = max(energy.items(), key=lambda kv: kv[1])
+    carrier_name = _CARRIER_LABELS.get(top_carrier_code, top_carrier_code)
+    carrier_share = (top_carrier_kwh / total_energy) * 100
+
+    # Counterfactual portfolio CI: replace this ticker's CI with its 2024 pathway value.
+    aligned_ci = top["pathway"][2024]
+    counterfactual_ci = sum(
+        w * (aligned_ci if t["ticker"] == top["ticker"]
+             else t["carbon_intensity_kgco2_m2"])
+        for t, _c, w in contribs
+    )
+    delta_pct = ((portfolio["carbon_intensity_kgco2_m2"] - counterfactual_ci)
+                 / portfolio["carbon_intensity_kgco2_m2"]) * 100
+
+    # Would the counterfactual portfolio align in 2024?  Compare to portfolio pathway 2024.
+    pathway_2024 = portfolio["pathway"][2024]
+    counterfactual_aligned = counterfactual_ci <= pathway_2024
+
+    return {
+        "ticker": top["ticker"],
+        "name": top["name"],
+        "sleeve": worst_sleeve["label"],
+        "carrier_name": carrier_name,
+        "carrier_share_pct": carrier_share,
+        "contrib_share_pct": contrib_share_pct,
+        "delta_pct": delta_pct,
+        "current_ci": portfolio["carbon_intensity_kgco2_m2"],
+        "counterfactual_ci": counterfactual_ci,
+        "pathway_2024": pathway_2024,
+        "counterfactual_aligned": counterfactual_aligned,
+    }
+
+
+def render_headline_brief(brief: dict):
+    aligned_clause = (
+        " — sufficient to bring the portfolio back into alignment with the 1.5°C pathway"
+        if brief["counterfactual_aligned"]
+        else f", narrowing the gap to the {brief['pathway_2024']:.1f} kgCO₂e/m² pathway value"
+    )
+    sentence = (
+        f"<b>{brief['name']}</b> ({brief['ticker']}) — through its "
+        f"<i>{brief['sleeve']}</i> sleeve — accounts for an estimated "
+        f"<b>{brief['contrib_share_pct']:.0f}% of portfolio carbon intensity</b>. "
+        f"Its dominant carrier is {brief['carrier_name']} "
+        f"({brief['carrier_share_pct']:.0f}% of the sleeve's energy). "
+        f"If this holding decarbonised to its 2024 CRREM pathway value, "
+        f"portfolio carbon intensity would fall from "
+        f"<b>{brief['current_ci']:.1f}</b> to <b>{brief['counterfactual_ci']:.1f}</b> "
+        f"kgCO₂e/m² — a {brief['delta_pct']:.0f}% reduction"
+        f"{aligned_clause}."
+    )
+    st.markdown(
+        '<div class="brief">'
+        '<div class="brief-eyebrow">Brief · auto-generated from disclosed data</div>'
+        f'<div class="brief-body">{sentence}</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _section(num: str, title: str):
