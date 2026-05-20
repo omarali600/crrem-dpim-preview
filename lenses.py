@@ -144,16 +144,20 @@ def _render_nzif_distribution(dist, ticker_results=None):
         empty_cls = " empty" if pct <= 0 else ""
         cnt = counts.get(cat, 0)
         cnt_str = (f"{cnt} holding" if cnt == 1 else f"{cnt} holdings") if ticker_results is not None else ""
-        cells.append(f"""
-          <div class="cell{empty_cls}">
-            <div class="swatch" style="background:{CATEGORY_COLOR[cat]};"></div>
-            <div class="label">{cat}</div>
-            <div class="pct">{pct:.0f}<small>% of GIA</small></div>
-            <div class="count">{cnt_str}</div>
-          </div>
-        """)
+        # Single-line HTML — Streamlit's markdown turns indented HTML into
+        # a code block, so every cell must be on one line with no leading
+        # whitespace.
+        cell = (
+            f'<div class="cell{empty_cls}">'
+            f'<div class="swatch" style="background:{CATEGORY_COLOR[cat]};"></div>'
+            f'<div class="label">{cat}</div>'
+            f'<div class="pct">{pct:.0f}<small>% of GIA</small></div>'
+            f'<div class="count">{cnt_str}</div>'
+            f'</div>'
+        )
+        cells.append(cell)
     st.markdown(
-        f'<div class="nzif-legend">{"".join(cells)}</div>',
+        '<div class="nzif-legend">' + "".join(cells) + '</div>',
         unsafe_allow_html=True,
     )
 
