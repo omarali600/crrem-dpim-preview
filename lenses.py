@@ -89,7 +89,7 @@ def render_ic(ticker_results, portfolio):
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     _section("02", "NZIF classification — distribution of portfolio by GIA")
-    _render_nzif_distribution(portfolio["nzif_distribution"])
+    _render_nzif_distribution(portfolio["nzif_distribution"], ticker_results)
 
     _section("03", "Holdings")
     _render_holdings_table(ticker_results, action_chip=True)
@@ -98,7 +98,13 @@ def render_ic(ticker_results, portfolio):
     _render_drilldown(ticker_results)
 
 
-def _render_nzif_distribution(dist):
+def _render_nzif_distribution(dist, ticker_results=None):
+    """Clean unlabelled bar + structured legend below.
+
+    The inside-bar label approach is brittle when categories are sparse
+    (e.g. 4% segments forcing rotated illegible text). Splitting the visual
+    into chart + legend gives every category equal typographic dignity.
+    """
     fig = go.Figure()
     for cat in CATEGORIES:
         pct = dist.get(cat, 0.0)
@@ -107,26 +113,49 @@ def _render_nzif_distribution(dist):
         fig.add_trace(go.Bar(
             x=[pct], y=[""], orientation="h",
             marker=dict(color=CATEGORY_COLOR[cat], line=dict(width=0)),
-            name=cat, text=f"{cat} · {pct:.0f}%", textposition="inside",
-            insidetextanchor="middle",
-            textfont=dict(family="Open Sans", size=12, color="#FFFFFF"),
+            name=cat,
             hovertemplate=f"<b>{cat}</b><br>%{{x:.1f}}%% of GIA<extra></extra>",
         ))
     fig.update_layout(
-        barmode="stack", height=78,
-        margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
+        barmode="stack",
+        height=42,
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         showlegend=False,
-        xaxis=dict(visible=False, range=[0, 100]), yaxis=dict(visible=False),
+        xaxis=dict(visible=False, range=[0, 100]),
+        yaxis=dict(visible=False),
+        hoverlabel=dict(
+            font=dict(family="JetBrains Mono", size=12),
+            bgcolor="#FAF7EE", bordercolor="#385676",
+        ),
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    legend_html = "".join(
-        f'<span style="margin-right:1.4rem; font-size:0.82rem; font-family:Open Sans;">'
-        f'<span class="dot" style="background:{CATEGORY_COLOR[c]}"></span>{c}</span>'
-        for c in CATEGORIES
+
+    # Structured legend below.  Counts derived from ticker_results when supplied.
+    counts: dict[str, int] = {c: 0 for c in CATEGORIES}
+    if ticker_results is not None:
+        for t in ticker_results:
+            counts[t["nzif_category"]] = counts.get(t["nzif_category"], 0) + 1
+
+    cells = []
+    for cat in CATEGORIES:
+        pct = dist.get(cat, 0.0)
+        empty_cls = " empty" if pct <= 0 else ""
+        cnt = counts.get(cat, 0)
+        cnt_str = (f"{cnt} holding" if cnt == 1 else f"{cnt} holdings") if ticker_results is not None else ""
+        cells.append(f"""
+          <div class="cell{empty_cls}">
+            <div class="swatch" style="background:{CATEGORY_COLOR[cat]};"></div>
+            <div class="label">{cat}</div>
+            <div class="pct">{pct:.0f}<small>% of GIA</small></div>
+            <div class="count">{cnt_str}</div>
+          </div>
+        """)
+    st.markdown(
+        f'<div class="nzif-legend">{"".join(cells)}</div>',
+        unsafe_allow_html=True,
     )
-    st.markdown(f'<div style="margin-top:0.4rem;">{legend_html}</div>',
-                unsafe_allow_html=True)
 
 
 def _action_for(misalignment_year, nzif_category):
@@ -257,7 +286,7 @@ def _fossil_share(t):
 
 def render_regulatory(ticker_results, portfolio, ticker_inputs):
     _section("01", "NZIF — Net Zero Investment Framework classification")
-    _render_nzif_distribution(portfolio["nzif_distribution"])
+    _render_nzif_distribution(portfolio["nzif_distribution"], ticker_results)
     st.markdown(
         f"""
         <p style="color:{MUTED}; font-size:0.88rem; margin-top:0.9rem;">
